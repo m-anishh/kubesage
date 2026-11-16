@@ -36,7 +36,7 @@ resource "aws_eks_pod_identity_association" "agent" {
   depends_on      = [aws_eks_addon.pod_identity]
 }
 
-# --- external-secrets: read exactly one secret ---
+# --- external-secrets: read only the KubeSage secrets ---
 resource "aws_iam_role" "external_secrets" {
   name               = "kubesage-external-secrets"
   assume_role_policy = data.aws_iam_policy_document.pod_identity_trust.json
@@ -44,8 +44,11 @@ resource "aws_iam_role" "external_secrets" {
 
 data "aws_iam_policy_document" "external_secrets" {
   statement {
-    actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
-    resources = [data.terraform_remote_state.base.outputs.github_token_secret_arn]
+    actions = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+    resources = [
+      data.terraform_remote_state.base.outputs.github_token_secret_arn,
+      data.terraform_remote_state.base.outputs.grafana_admin_secret_arn,
+    ]
   }
 }
 

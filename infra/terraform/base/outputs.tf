@@ -25,3 +25,7 @@ output "gha_plan_role_arn" {
 output "github_token_secret_arn" {
   value = aws_secretsmanager_secret.github_token.arn
 }
+
+output "grafana_admin_secret_arn" {
+  value = aws_secretsmanager_secret.grafana_admin.arn
+}
