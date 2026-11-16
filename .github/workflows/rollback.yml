@@ -11,9 +11,10 @@ permissions:
 
 jobs:
   rollback:
+    # Approvers: keep this list short, every name on it can roll back what runs in the cluster.
     if: >-
       !github.event.issue.pull_request &&
-      github.event.comment.user.login == 'm-anishh' &&
+      contains(fromJSON('["m-anishh", "mirabista"]'), github.event.comment.user.login) &&
       startsWith(github.event.comment.body, '/approve-rollback') &&
       contains(github.event.issue.labels.*.name, 'incident')
     runs-on: ubuntu-latest
