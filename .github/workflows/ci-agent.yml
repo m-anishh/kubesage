@@ -69,7 +69,7 @@ jobs:
 
       - name: Bump image tag
         run: |
-          yq -i ".image.tag = \"${GITHUB_SHA}\"" envs/dev/values-kubesage-agent.yaml
+          sed -i -E "s|^(  tag: ).*|\"${GITHUB_SHA}\"|" envs/dev/values-kubesage-agent.yaml  # keeps comments, unlike yq
           git config user.name kubesage-ci
           git config user.email ci@users.noreply.github.com
           git commit -am "ci: bump kubesage-agent to ${GITHUB_SHA::7}"

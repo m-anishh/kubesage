@@ -74,7 +74,7 @@ jobs:
       - name: Bump image tags
         run: |
           for app in orders-api payments-api; do
-            yq -i ".image.tag = \"${GITHUB_SHA}\"" "envs/dev/values-${app}.yaml"
+            sed -i -E "s|^(  tag: ).*|\"${GITHUB_SHA}\"|" "envs/dev/values-${app}.yaml"  # keeps comments, unlike yq
           done
           git config user.name kubesage-ci
           git config user.email ci@users.noreply.github.com
