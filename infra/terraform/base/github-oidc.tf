@@ -6,6 +6,12 @@ resource "aws_iam_openid_connect_provider" "github" {
 
 locals {
   repo = "${var.github_owner}/${var.github_repo}"
+  # New repos send an immutable subject with owner and repo IDs ("repo:owner@123/name@456:...").
+  # Check yours: gh api repos/<owner>/<repo>/actions/oidc/customization/sub
+  sub_prefixes = [
+    "repo:${local.repo}",
+    "repo:${var.github_owner}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}",
+  ]
 }
 
 data "aws_iam_policy_document" "trust_main" {
@@ -23,7 +29,7 @@ data "aws_iam_policy_document" "trust_main" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.repo}:ref:refs/heads/main"]
+      values   = [for p in local.sub_prefixes : "${p}:ref:refs/heads/main"]
     }
   }
 }
@@ -43,7 +49,7 @@ data "aws_iam_policy_document" "trust_pull_request" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.repo}:pull_request"]
+      values   = [for p in local.sub_prefixes : "${p}:pull_request"]
     }
   }
 }
