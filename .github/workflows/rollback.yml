@@ -15,7 +15,7 @@ jobs:
     if: >-
       !github.event.issue.pull_request &&
       contains(fromJSON('["m-anishh", "mirabista"]'), github.event.comment.user.login) &&
-      startsWith(github.event.comment.body, '/approve-rollback') &&
+      github.event.comment.body == '/approve-rollback' &&
       contains(github.event.issue.labels.*.name, 'incident')
     runs-on: ubuntu-latest
     concurrency: gitops-push

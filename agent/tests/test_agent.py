@@ -1,5 +1,6 @@
 import copy
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -149,6 +150,12 @@ def test_issue_body_cannot_forge_markers():
     assert body.count("<!-- kubesage:suspect_commit=") == 1
     assert f"<!-- kubesage:suspect_commit={SHA} -->" in body
     assert "@someone" not in body
+
+
+def test_rollback_requires_exact_approval_command():
+    workflow = (Path(__file__).parents[2] / ".github/workflows/rollback.yml").read_text()
+    assert "github.event.comment.body == '/approve-rollback'" in workflow
+    assert "startsWith(github.event.comment.body, '/approve-rollback')" not in workflow
 
 
 def test_webhook_sync_and_resolved(monkeypatch):
