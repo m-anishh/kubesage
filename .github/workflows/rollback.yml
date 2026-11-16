@@ -41,7 +41,7 @@ jobs:
         run: |
           gh issue comment ${{ github.event.issue.number }} -R "$GITHUB_REPOSITORY" -b "No valid suspect commit in this issue: no commit to revert, manual fix needed."
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.sha.outputs.sha != ''
         with:
           repository: m-anishh/kubesage-gitops

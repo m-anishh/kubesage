@@ -12,6 +12,7 @@ if [ -f "$HOME/.ssh/kubesage.pub" ]; then
   export TF_VAR_ssh_public_key
 fi
 
+terraform -chdir=infra/terraform/cluster init -input=false -backend-config=../backend.hcl >/dev/null
 terraform -chdir=infra/terraform/cluster destroy -auto-approve
 
 echo "Cluster destroyed in $(( ($(date +%s) - START) / 60 )) minutes. Billing stopped."

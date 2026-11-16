@@ -1,4 +1,4 @@
-# Bucket name comes from ../backend.hcl (git-ignored) so the account ID stays out of Git:
+# Bucket name comes from ../backend.hcl (git-ignored, written by scripts/setup-state.sh):
 #   terraform init -backend-config=../backend.hcl
 terraform {
   backend "s3" {

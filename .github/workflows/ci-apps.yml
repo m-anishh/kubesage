@@ -20,9 +20,9 @@ jobs:
     env:
       IMAGE: ${{ vars.ECR_REGISTRY }}/${{ matrix.app }}:${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -47,7 +47,7 @@ jobs:
       # Only pushes to main reach AWS: the push role trusts the main branch only.
       - name: Log in to AWS with OIDC
         if: github.event_name == 'push'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_PUSH_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
@@ -66,7 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: gitops-push
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: m-anishh/kubesage-gitops
           token: ${{ secrets.GITOPS_TOKEN }}
