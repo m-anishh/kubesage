@@ -21,6 +21,23 @@ _core: k8s.CoreV1Api | None = None
 _apps: k8s.AppsV1Api | None = None
 
 
+def bridge_bearer_token(cfg: k8s.Configuration) -> k8s.Configuration:
+    """The config loaders store the token as api_key['authorization'], but this client version only sends
+    api_key['BearerToken']: without this every call goes out with no token and gets 401 Unauthorized.
+    Copying it inside the refresh hook keeps the rotating service-account token working."""
+    loader_hook = cfg.refresh_api_key_hook
+
+    def refresh(c: k8s.Configuration) -> None:
+        if loader_hook:
+            loader_hook(c)
+        if "authorization" in c.api_key:
+            c.api_key["BearerToken"] = c.api_key["authorization"]
+
+    cfg.refresh_api_key_hook = refresh
+    refresh(cfg)
+    return cfg
+
+
 def _clients() -> tuple[k8s.CoreV1Api, k8s.AppsV1Api]:
     global _core, _apps
     if _core is None:
@@ -28,7 +45,8 @@ def _clients() -> tuple[k8s.CoreV1Api, k8s.AppsV1Api]:
             k8s_config.load_incluster_config()
         except k8s_config.ConfigException:
             k8s_config.load_kube_config()  # local development with your kubeconfig
-        _core, _apps = k8s.CoreV1Api(), k8s.AppsV1Api()
+        api = k8s.ApiClient(bridge_bearer_token(k8s.Configuration.get_default_copy()))
+        _core, _apps = k8s.CoreV1Api(api), k8s.AppsV1Api(api)
     return _core, _apps
 
 

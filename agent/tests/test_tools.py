@@ -55,6 +55,18 @@ def test_deployment_env_values_are_stripped():
     assert summary["containers"][0]["limits"] == {"memory": "128Mi"}
 
 
+def test_bearer_token_is_sent_and_refreshed():
+    from kubernetes.client import Configuration
+
+    cfg = Configuration()
+    cfg.api_key["authorization"] = "bearer first"
+    tokens = iter(["bearer second"])
+    cfg.refresh_api_key_hook = lambda c: c.api_key.update(authorization=next(tokens, c.api_key["authorization"]))
+    tools.bridge_bearer_token(cfg)
+    assert cfg.auth_settings()["BearerToken"]["value"] == "bearer second"
+    assert cfg.auth_settings()["BearerToken"]["key"] == "authorization"
+
+
 def test_namespace_guard(monkeypatch):
     monkeypatch.setattr(config, "ALLOWED_NAMESPACES", ["dev"])
     with pytest.raises(PermissionError):
