@@ -1,0 +1,7 @@
+fastapi==0.163.1
+uvicorn==0.54.0
+boto3==1.44.3
+kubernetes==36.0.0  # 37.x needs python-dateutil 3, which botocore does not allow yet
+qdrant-client==1.20.0
+httpx==0.28.1
+prometheus-client==0.26.0

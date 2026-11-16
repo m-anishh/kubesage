@@ -1,0 +1,7 @@
+tests/
+conftest.py
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+Dockerfile

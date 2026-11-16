@@ -1,0 +1,78 @@
+name: rollback
+
+# A human comments /approve-rollback on an incident issue; this reverts the suspect commit in kubesage-gitops.
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  rollback:
+    if: >-
+      !github.event.issue.pull_request &&
+      github.event.comment.user.login == 'm-anishh' &&
+      startsWith(github.event.comment.body, '/approve-rollback') &&
+      contains(github.event.issue.labels.*.name, 'incident')
+    runs-on: ubuntu-latest
+    concurrency: gitops-push
+    steps:
+      # The body is passed through env, never pasted into the script: it was written by an agent that read logs.
+      - name: Read the suspect commit from the issue
+        id: sha
+        env:
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          markers=$(printf '%s' "$BODY" | grep -oE '<!-- kubesage:suspect_commit=[^ ]* -->' || true)
+          count=$(printf '%s' "$markers" | grep -c . || true)
+          sha=$(printf '%s' "$markers" | sed -E 's/<!-- kubesage:suspect_commit=([^ ]*) -->/\1/')
+          if [ "$count" -ne 1 ] || ! printf '%s' "$sha" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "sha=" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: No commit to revert
+        if: steps.sha.outputs.sha == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} -R "$GITHUB_REPOSITORY" -b "No valid suspect commit in this issue: no commit to revert, manual fix needed."
+
+      - uses: actions/checkout@v4
+        if: steps.sha.outputs.sha != ''
+        with:
+          repository: m-anishh/kubesage-gitops
+          token: ${{ secrets.GITOPS_TOKEN }}
+          fetch-depth: 0
+
+      - name: Revert the commit in kubesage-gitops
+        if: steps.sha.outputs.sha != ''
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          git cat-file -e "${SHA}^{commit}" || { echo "commit not in kubesage-gitops"; exit 1; }
+          git merge-base --is-ancestor "$SHA" HEAD || { echo "commit is not on main"; exit 1; }
+          git config user.name kubesage-rollback
+          git config user.email rollback@users.noreply.github.com
+          git revert --no-edit "$SHA"
+          git commit --amend --no-edit -m "$(git log -1 --format=%B)" -m "Approved in ${{ github.event.issue.html_url }}"
+          git push
+          echo "REVERT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Report back on the issue
+        if: steps.sha.outputs.sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} -R "$GITHUB_REPOSITORY" -b \
+            "Reverted \`${{ steps.sha.outputs.sha }}\` in kubesage-gitops as https://github.com/m-anishh/kubesage-gitops/commit/${REVERT_SHA}. ArgoCD will sync it within about 3 minutes."
+
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} -R "$GITHUB_REPOSITORY" -b "Rollback failed, see ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

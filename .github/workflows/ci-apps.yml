@@ -1,0 +1,83 @@
+name: ci-apps
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/**", ".github/workflows/ci-apps.yml"]
+  pull_request:
+    paths: ["apps/**", ".github/workflows/ci-apps.yml"]
+
+permissions:
+  id-token: write # OIDC login to AWS
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [orders-api, payments-api]
+    env:
+      IMAGE: ${{ vars.ECR_REGISTRY }}/${{ matrix.app }}:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Lint and test
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          pip install -r requirements.txt pytest==9.2.0 ruff==0.17.5
+          ruff check .
+          pytest -q
+
+      - name: Build image
+        run: docker build -t "$IMAGE" apps/${{ matrix.app }}
+
+      - name: Scan image (fail on fixable CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      # Only pushes to main reach AWS: the push role trusts the main branch only.
+      - name: Log in to AWS with OIDC
+        if: github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PUSH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to ECR
+        if: github.event_name == 'push'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push image
+        if: github.event_name == 'push'
+        run: docker push "$IMAGE"
+
+  update-gitops:
+    needs: build # once, after both images are pushed, so two jobs never race to push
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency: gitops-push
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: m-anishh/kubesage-gitops
+          token: ${{ secrets.GITOPS_TOKEN }}
+
+      - name: Bump image tags
+        run: |
+          for app in orders-api payments-api; do
+            yq -i ".image.tag = \"${GITHUB_SHA}\"" "envs/dev/values-${app}.yaml"
+          done
+          git config user.name kubesage-ci
+          git config user.email ci@users.noreply.github.com
+          git commit -am "ci: bump orders-api, payments-api to ${GITHUB_SHA::7}"
+          for i in 1 2 3; do git pull --rebase && git push && exit 0; sleep 5; done
+          exit 1

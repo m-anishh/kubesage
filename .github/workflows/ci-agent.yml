@@ -1,0 +1,77 @@
+name: ci-agent
+
+on:
+  push:
+    branches: [main]
+    paths: ["agent/**", ".github/workflows/ci-agent.yml"]
+  pull_request:
+    paths: ["agent/**", ".github/workflows/ci-agent.yml"]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ vars.ECR_REGISTRY }}/kubesage-agent:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Lint and test
+        working-directory: agent
+        run: |
+          pip install -r requirements.txt pytest==9.2.0 ruff==0.17.5
+          ruff check .
+          pytest -q
+
+      - name: Build image
+        run: docker build -t "$IMAGE" agent
+
+      - name: Scan image (fail on fixable CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Log in to AWS with OIDC
+        if: github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PUSH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to ECR
+        if: github.event_name == 'push'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push image
+        if: github.event_name == 'push'
+        run: docker push "$IMAGE"
+
+  update-gitops:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency: gitops-push
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: m-anishh/kubesage-gitops
+          token: ${{ secrets.GITOPS_TOKEN }}
+
+      - name: Bump image tag
+        run: |
+          yq -i ".image.tag = \"${GITHUB_SHA}\"" envs/dev/values-kubesage-agent.yaml
+          git config user.name kubesage-ci
+          git config user.email ci@users.noreply.github.com
+          git commit -am "ci: bump kubesage-agent to ${GITHUB_SHA::7}"
+          for i in 1 2 3; do git pull --rebase && git push && exit 0; sleep 5; done
+          exit 1

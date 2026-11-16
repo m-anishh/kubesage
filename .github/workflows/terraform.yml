@@ -1,0 +1,73 @@
+name: terraform
+
+on:
+  pull_request:
+    paths: ["infra/**", ".github/workflows/terraform.yml"]
+
+permissions:
+  id-token: write # OIDC login with the read-only plan role
+  contents: read
+  pull-requests: write # post the plan as a comment
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [base, cluster]
+    defaults:
+      run:
+        working-directory: infra/terraform/${{ matrix.stack }}
+    env:
+      TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_my_ip_cidr: 203.0.113.10/32 # placeholder: plan only, the real IP is set by scripts/up.sh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.5
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: fmt
+        run: terraform fmt -check -recursive
+
+      - name: init
+        run: terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+
+      - name: validate
+        run: terraform validate -no-color
+
+      # -lock=false: the plan role can read state but not write the lock file.
+      - name: plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -input=false -no-color -lock=false -detailed-exitcode > plan.txt 2>&1
+          code=$?
+          cat plan.txt
+          [ "$code" -eq 1 ] && exit 1 || exit 0
+
+      - name: Comment the plan on the PR
+        uses: actions/github-script@v7
+        env:
+          STACK: ${{ matrix.stack }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = `infra/terraform/${process.env.STACK}/plan.txt`;
+            let plan = fs.readFileSync(path, 'utf8');
+            if (plan.length > 60000) plan = plan.slice(-60000);
+            const summary = (plan.match(/Plan: .*|No changes\..*/) || ['see log'])[0];
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `### Terraform plan: \`${process.env.STACK}\`\n**${summary}**\n<details><summary>Full plan</summary>\n\n\`\`\`\n${plan}\n\`\`\`\n</details>`,
+            });

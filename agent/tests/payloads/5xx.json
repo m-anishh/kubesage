@@ -1,0 +1,25 @@
+{
+  "version": "4",
+  "status": "firing",
+  "receiver": "kubesage",
+  "groupLabels": {
+    "alertname": "KubeSageHigh5xxRate"
+  },
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubeSageHigh5xxRate",
+        "namespace": "dev",
+        "severity": "warning",
+        "service": "payments-api"
+      },
+      "annotations": {
+        "summary": "dev/payments-api 5xx rate is 48%"
+      },
+      "startsAt": "2026-11-16T15:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "fingerprint": "eval-5xx"
+    }
+  ]
+}

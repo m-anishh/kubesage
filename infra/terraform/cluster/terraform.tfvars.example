@@ -1,0 +1,2 @@
+state_bucket = "kubesage-tfstate-<account-id>"
+# my_ip_cidr is passed by scripts/up.sh
