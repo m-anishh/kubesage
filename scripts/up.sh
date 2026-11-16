@@ -20,7 +20,7 @@ terraform -chdir=infra/terraform/cluster apply -auto-approve
 aws eks update-kubeconfig --name kubesage --region ap-south-1
 kubectl get nodes
 
-# Phase 4 adds: bash scripts/bootstrap-argocd.sh
+bash scripts/bootstrap-argocd.sh
 
 echo "Cluster up in $(( ($(date +%s) - START) / 60 )) minutes. Billing is ON: run 'bash scripts/down.sh' when you finish."
 terraform -chdir=infra/terraform/cluster output
